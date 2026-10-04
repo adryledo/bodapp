@@ -206,7 +206,7 @@ jobs:
 
       - name: Provision Caddy and verify TLS
         env:
-          CADDY_DOMAIN: ${{ secrets.CADDY_DOMAIN }}
+          CADDY_DOMAIN: ${{ vars.CADDY_DOMAIN }}
           CADDY_EMAIL: ${{ secrets.CADDY_EMAIL }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
