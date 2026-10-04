@@ -1,3 +1,6 @@
+[![Infrastructure — Caddy (HTTPS)](https://github.com/adryledo/bodapp/actions/workflows/infra.yml/badge.svg)](https://github.com/adryledo/bodapp/actions/workflows/infra.yml)
+[![Deploy to Hetzner](https://github.com/adryledo/bodapp/actions/workflows/deploy.yml/badge.svg)](https://github.com/adryledo/bodapp/actions/workflows/deploy.yml)
+
 # Bodapp
 
 Wedding management + invitation platform for **v1** on a Hetzner VPS.
