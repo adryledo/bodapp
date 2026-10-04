@@ -73,6 +73,8 @@ jobs:
           TS_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
         run: |
           set -euo pipefail
           if [ -z "${TS_AUTHKEY:-}" ]; then
@@ -135,6 +137,42 @@ jobs:
             echo "Check: server joined to the tailnet; DEPLOY_HOST = MagicDNS name or 100.x IP;" >&2
             echo "       'sudo tailscale set --ssh' (or sshd) on the server; tailnet ACLs; firewall." >&2
             sudo tailscale status >&2 || true
+            exit 1
+          fi
+
+          # Full SSH auth probe: catches Tailscale-SSH "additional check"
+          # (interactive ACL check — CI can never complete it) and key
+          # problems HERE, with the fix printed, instead of a cryptic
+          # timeout mid-deploy. ServerAlive 5x3 bounds the check-wait.
+          echo "==> SSH auth probe over the tailnet"
+          RC=0
+          PKEY=()
+          PK=""
+          if [ -n "$DEPLOY_KEY" ]; then
+            PK="$(mktemp)"
+            chmod 600 "$PK"
+            printf '%s\n' "$DEPLOY_KEY" > "$PK"
+            PKEY=(-i "$PK")
+          fi
+          OUT="$(ssh -p "$DEPLOY_PORT" -o BatchMode=yes -o ConnectTimeout=10 \
+            -o ServerAliveInterval=5 -o ServerAliveCountMax=3 \
+            -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            "${PKEY[@]}" "$DEPLOY_USER@$ADDR" true 2>&1)" || RC=$?
+          if [ -n "$PK" ]; then rm -f "$PK"; fi
+          if [ "$RC" = 0 ]; then
+            echo "    SSH auth OK as $DEPLOY_USER@$ADDR"
+          else
+            printf '%s\n' "$OUT" >&2
+            if printf '%s' "$OUT" | grep -qi 'additional check'; then
+              echo "FATAL: Tailscale SSH demands an INTERACTIVE check for this runner node — CI can never complete it." >&2
+              echo "Fix (admin console -> Access controls -> ssh): put an ACCEPT rule ABOVE your check rule, e.g." >&2
+              echo '  {"action":"accept","src":["autogroup:member"],"dst":["autogroup:self"],"users":["root","autogroup:nonroot","*"]}' >&2
+              echo "  (dst = the server's tag if it is tagged; users must include $DEPLOY_USER; tag the ephemeral key tag:ci to tighten src.)" >&2
+            elif printf '%s' "$OUT" | grep -qi 'permission denied'; then
+              echo "FATAL: server rejected the key for $DEPLOY_USER — authorized_keys (sshd mode) or the Tailscale SSH 'users' list (tailscale-ssh mode)." >&2
+            else
+              echo "FATAL: SSH probe failed (rc=$RC)." >&2
+            fi
             exit 1
           fi
           echo "ts_ip=$ADDR" >> "$GITHUB_OUTPUT"

@@ -167,6 +167,22 @@ Then in a browser:
   `DEPLOY_HOST` still the **public** IP (must be MagicDNS name / `100.x`),
   Tailscale SSH not enabled (`sudo tailscale set --ssh`) or `sshd` down, or
   ACLs deny it. Compare `tailscale status` on the box with the run log.
+- **`Tailscale SSH requires an additional check` + `Connection … port 22
+  timed out` (exit 255)** → the tailnet's `ssh` ACL matched with
+  **`"action": "check"`** (interactive approval) — CI can never open that
+  `login.tailscale.com` URL. The workflow's auth probe now fails fast and
+  prints the fix. In the **admin console → Access controls → ssh**, add an
+  **`accept` rule above the `check` rule** (first match wins):
+
+  ```json
+  {"action": "accept", "src": ["autogroup:member"], "dst": ["autogroup:self"], "users": ["root", "autogroup:nonroot", "*"]}
+  ```
+
+  Adjust: `dst` → the server's tag if it is tagged; `users` must include
+  your `DEPLOY_USER`; tighten `src` to `tag:ci` if you create the ephemeral
+  key with that tag. Alternative: no Tailscale SSH at all
+  (`sudo tailscale set --ssh=false`) + `sshd`/`authorized_keys` — the
+  workflow already passes `DEPLOY_SSH_KEY`.
 - **App comes up but health probe fails** → the pipeline prints logs on
   failure and rolls back the previous image; SSH in and run
   `cd /opt/bodapp && docker compose logs --tail=100 app`.
